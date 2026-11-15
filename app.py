@@ -4,6 +4,7 @@ from pathlib import Path
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 from familia_demo import dados_demo, RENDA, brl, CUSTOS
 from smart_home_3d import exibir_smart_home_3d, obter_resumo_consumo
@@ -13,11 +14,27 @@ from simulador import simular_economia, CATEGORIAS
 
 st.set_page_config(page_title="Lumina AI | Minha Casa",page_icon="🏠",layout="wide",initial_sidebar_state="expanded")
 st.markdown("""<style>
-.stApp {background:linear-gradient(135deg,#061122,#0b1d32 70%,#061122);color:#eaf4ff}
-[data-testid="stSidebar"] {background:#08172a}
-[data-testid="stMetric"] {background:#102840;border:1px solid #224660;border-radius:14px;padding:16px}
-h1,h2,h3 {color:#e8f9ff!important}
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
+html,body,[class*="css"],.stApp {font-family:'Outfit',sans-serif}
+.stApp {background:radial-gradient(circle at 85% 0%,#123e4c 0%,transparent 32%),linear-gradient(140deg,#050c19,#0b1b2e 65%,#07111e);color:#eaf7ff}
+[data-testid="stSidebar"] {background:linear-gradient(180deg,#071d2e,#07101e);border-right:1px solid #19465b}
+[data-testid="stMetric"] {background:linear-gradient(145deg,#102f43,#0c2135);border:1px solid #255a69;border-radius:20px;padding:19px;box-shadow:0 12px 25px #0002}
+[data-testid="stMetricValue"] {color:#67f4d4}
+.stButton>button {border-radius:13px;background:#11394a;color:#ecfffb;border:1px solid #267986;transition:.2s}
+.stButton>button:hover {background:#176b6c;color:white;border-color:#4cf0d0}
+[data-testid="stPlotlyChart"] {background:#0b2033;border:1px solid #205169;border-radius:22px;padding:10px}
+h1,h2,h3 {color:#f2ffff!important;letter-spacing:-.02em}
 </style>""",unsafe_allow_html=True)
+
+def visual(fig,altura=390):
+    fig.update_layout(template='plotly_dark',paper_bgcolor='#0b2033',plot_bgcolor='#0b2033',height=altura,
+        font=dict(family='Arial',color='#d7edf6'),margin=dict(l=30,r=30,t=55,b=35),
+        colorway=['#45ebc8','#38bdf8','#a78bfa','#fbbf24','#fb7185'],
+        legend=dict(orientation='h',y=-.22))
+    fig.update_xaxes(showgrid=False,zeroline=False)
+    fig.update_yaxes(gridcolor='rgba(136,204,223,.13)',zeroline=False)
+    return fig
+
 DB=Path(__file__).with_name('cliente_demo.db')
 PRODUTOS=[('Arroz','Grãos e massas',3,'pacotes',2,'2027-04-20',22.5),('Feijão','Grãos e massas',1,'pacotes',2,'2027-02-18',9.8),('Leite','Laticínios',5,'litros',3,'2026-11-13',5.7),('Macarrão','Grãos e massas',4,'pacotes',2,'2027-03-01',6.5),('Óleo','Outros',1,'unidades',2,'2027-06-01',8.9),('Detergente','Limpeza',3,'unidades',2,'2027-09-01',3.5),('Café','Bebidas',2,'pacotes',2,'2027-01-15',18.0),('Tomate','Hortifruti',2,'kg',1,'2026-11-11',8.0),('Água mineral','Bebidas',8,'litros',4,'2027-05-10',2.5),('Farinha','Grãos e massas',2,'pacotes',1,'2027-05-22',7.0)]
 
@@ -42,7 +59,7 @@ iniciar_despensa()
 with st.sidebar:
     st.markdown('## ✦ LUMINA AI')
     st.caption('Sua casa. Suas decisões.')
-    pagina=st.radio('Navegação',['Visão Geral','Análise Inteligente','Laboratório de Economia','Assistente Lumina','Minha Smart Home','Despensa Inteligente'],label_visibility='collapsed')
+    pagina=st.radio('Navegação',['Visão Geral','Análise Inteligente','Laboratório de Economia','Assistente Lumina','Minha Smart Home','Despensa Inteligente','Minhas Despesas'],label_visibility='collapsed')
     st.divider()
     st.caption('👨‍👩‍👧‍👦 Residência familiar · 4 moradores')
     st.caption('Dados de demonstração · sensores simulados')
@@ -54,11 +71,17 @@ if pagina=='Visão Geral':
     a.metric('Renda familiar',brl(RENDA));b.metric('Despesas do mês',brl(total));c.metric('Saldo disponível',brl(saldo));d.metric('Moradores','4')
     a,b,c=st.columns(3)
     a.metric('Energia',f'{consumo:.1f} kWh');b.metric('Água',f'{agua_total:.1f} m³');c.metric('Maior despesa',cats.iloc[0].categoria)
-    l,r=st.columns([1.4,1])
+    l,r=st.columns([1.35,1])
     with l:
-        diario=gastos.groupby('data',as_index=False).valor.sum(); diario['acumulado']=diario.valor.cumsum()
-        st.plotly_chart(px.area(diario,x='data',y='acumulado',title='Evolução do orçamento',labels={'data':'Data','acumulado':'Total (R$)'}),use_container_width=True)
-    with r: st.plotly_chart(px.bar(cats,x='valor',y='categoria',orientation='h',title='Para onde foi o dinheiro?',labels={'valor':'R$','categoria':''}),use_container_width=True)
+        diario=gastos.groupby('data',as_index=False).valor.sum().sort_values('data');diario['acumulado']=diario.valor.cumsum()
+        fig=go.Figure(go.Scatter(x=diario.data,y=diario.acumulado,mode='lines+markers',line=dict(color='#45ebc8',width=4,shape='spline'),fill='tozeroy',fillcolor='rgba(69,235,200,.13)',name='Acumulado'))
+        fig.update_layout(title='📈 Evolução dos gastos',yaxis_title='R$')
+        st.plotly_chart(visual(fig),use_container_width=True)
+    with r:
+        fig=go.Figure(go.Pie(labels=cats.categoria,values=cats.valor,hole=.68,textinfo='percent',marker=dict(colors=['#45ebc8','#38bdf8','#a78bfa','#fbbf24','#fb7185','#60a5fa'])))
+        fig.add_annotation(text=f'<b>{brl(total)}</b><br>despesas',x=.5,y=.5,showarrow=False,font=dict(color='white',size=15))
+        fig.update_layout(title='🍩 Distribuição do orçamento')
+        st.plotly_chart(visual(fig),use_container_width=True)
     st.info('💡 Sugestão Lumina: revisar compras de alimentação e o consumo de energia no período noturno.')
 
 elif pagina=='Análise Inteligente':
@@ -70,10 +93,12 @@ elif pagina=='Análise Inteligente':
     labels=['Renda familiar','Despesas','Saldo']+cats.categoria.tolist()
     sankey=go.Figure(go.Sankey(node=dict(label=labels,pad=18,thickness=18),link=dict(source=[0,0]+[1]*len(cats),target=[1,2]+list(range(3,len(labels))),value=[total,max(saldo,0)]+cats.valor.tolist())))
     sankey.update_layout(height=350,margin=dict(l=5,r=5,t=15,b=5))
-    st.plotly_chart(sankey,use_container_width=True)
+    st.plotly_chart(visual(sankey,410),use_container_width=True)
     st.subheader('Mapa de calor do consumo de energia')
     mapa=energia.pivot(index='hora',columns='dia',values='kwh')
-    st.plotly_chart(px.imshow(mapa,aspect='auto',color_continuous_scale='Turbo',labels={'x':'Dia do mês','y':'Hora','color':'kWh'}),use_container_width=True)
+    fig=go.Figure(go.Heatmap(z=mapa.values,x=mapa.columns,y=mapa.index,colorscale=[[0,'#0a1a31'],[.4,'#0e7490'],[.75,'#45ebc8'],[1,'#fde68a']]))
+    fig.update_layout(title='🌡️ Mapa de calor · energia por hora',xaxis_title='Dia',yaxis_title='Hora')
+    st.plotly_chart(visual(fig,450),use_container_width=True)
     st.subheader('Plano de economia já calculado')
     metas={'Energia':.15,'Água':.10,'Alimentação':.08,'Transporte':.05}
     proj=cats.copy();proj['novembro']=proj.apply(lambda x:x.valor*(1-metas.get(x.categoria,0)),axis=1)
@@ -82,7 +107,7 @@ elif pagina=='Análise Inteligente':
     a.metric('Mês analisado',brl(total));b.metric('Próximo mês projetado',brl(total-economia));c.metric('Economia potencial',brl(economia))
     long=proj.melt(id_vars='categoria',value_vars=['valor','novembro'],var_name='mes',value_name='R$')
     long['mes']=long.mes.replace({'valor':'Outubro','novembro':'Novembro (meta)'})
-    st.plotly_chart(px.bar(long,x='categoria',y='R$',color='mes',barmode='group'),use_container_width=True)
+    st.plotly_chart(visual(px.bar(long,x='categoria',y='R$',color='mes',barmode='group',color_discrete_sequence=['#38bdf8','#45ebc8'])),use_container_width=True)
     st.success('Plano recomendado: diminuir luzes desnecessárias, monitorar água, planejar compras e usar alertas de validade.')
     st.caption('Projeções hipotéticas baseadas em metas, não previsões garantidas.')
     st.subheader('🧪 Machine Learning aplicado à energia')
@@ -122,7 +147,7 @@ elif pagina=='Laboratório de Economia':
         'Com metas':[resultado['por_categoria'][x] for x in categorias]})
     fig=px.bar(comparacao.melt(id_vars='Categoria',var_name='Cenário',value_name='R$'),
                x='Categoria',y='R$',color='Cenário',barmode='group',title='Seu orçamento: antes e depois')
-    st.plotly_chart(fig,use_container_width=True)
+    st.plotly_chart(visual(fig),use_container_width=True)
     st.markdown('### Sua missão de economia')
     if resultado['economia'] >= 200:
         st.success('🏆 Meta Ouro! Seu cenário economiza pelo menos R$ 200 por mês.')
@@ -225,6 +250,39 @@ elif pagina=='Despensa Inteligente':
                     st.rerun()
                 else: st.error('Informe o nome do produto.')
     st.caption('Os ajustes da despensa ficam no banco separado cliente_demo.db, sem alterar lumina.db.')
+
+
+elif pagina=='Minhas Despesas':
+    from database import criar_tabela, adicionar_despesa, listar_despesas, excluir_despesa
+    st.title('💳 Minhas Despesas')
+    st.caption('Dados cadastrados pelo usuário, armazenados separadamente da família fictícia. Este módulo utiliza lumina.db.')
+    criar_tabela()
+    with st.form('nova_despesa_real',clear_on_submit=True):
+        nome=st.text_input('Descrição',placeholder='Ex.: Conta de energia')
+        categoria=st.selectbox('Categoria',['Energia','Água','Alimentação','Moradia','Transporte','Internet','Saúde','Educação','Outros'])
+        valor=st.number_input('Valor (R$)',min_value=0.01,step=1.0)
+        if st.form_submit_button('Adicionar despesa',use_container_width=True):
+            if nome.strip():
+                adicionar_despesa(nome.strip(),float(valor),categoria)
+                st.success('Despesa registrada.');st.rerun()
+            else: st.error('Preencha a descrição.')
+    linhas=listar_despesas()
+    if linhas:
+        real=pd.DataFrame(linhas,columns=['ID','Descrição','Valor','Categoria','Data'])
+        st.metric('Total registrado',brl(float(real.Valor.sum())))
+        st.dataframe(real,use_container_width=True,hide_index=True)
+        agrup=real.groupby('Categoria',as_index=False).Valor.sum().sort_values('Valor')
+        fig=go.Figure(go.Bar(x=agrup.Valor,y=agrup.Categoria,orientation='h',marker=dict(color='#45ebc8')))
+        fig.update_layout(title='Gastos reais cadastrados por categoria',xaxis_title='R$')
+        st.plotly_chart(visual(fig),use_container_width=True)
+        st.download_button('📥 Exportar CSV',real.to_csv(index=False).encode('utf-8-sig'),'minhas_despesas.csv','text/csv')
+        with st.expander('Excluir um registro por ID'):
+            escolhido=st.selectbox('Selecione o registro',options=real.ID.tolist(),format_func=lambda i:f'#{i} · {real.loc[real.ID==i,"Descrição"].iloc[0]}')
+            confirmar=st.checkbox('Confirmo a exclusão somente deste registro')
+            if st.button('Excluir registro',disabled=not confirmar):
+                if excluir_despesa(int(escolhido)): st.success('Registro excluído.');st.rerun()
+                else: st.error('ID não encontrado. Nada foi excluído.')
+    else: st.info('Nenhuma despesa cadastrada. Adicione uma acima.')
 
 st.divider()
 st.caption('Lumina AI · Ambiente de demonstração com dados financeiros e sensores simulados · Smart Home 2050')

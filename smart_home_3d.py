@@ -1061,74 +1061,49 @@ def exibir_smart_home_3d():
         f"Cenário selecionado: {st.session_state.lumina_cenario}"
     )
 
-    st.markdown("### 🏡 Explore sua casa")
-    st.caption("Novo: Raio-X para enxergar os cômodos, Mostrar telhado para ver a fachada e Sensores para destacar a automação. O modo Dia usa iluminação arquitetônica equilibrada.")
-
-    html = gerar_casa_3d()
-
-    components.html(
-        html,
-        height=730,
-        scrolling=False,
-    )
-
-    st.caption(
-        "Use o mouse para girar a casa, aproximar a câmera e selecionar "
-        "os ambientes."
-    )
-
-    st.divider()
-
-    st.markdown("### 💡 Controle de iluminação")
-
-    cols = st.columns(3)
-
-    for index, room in enumerate(ROOMS):
-        with cols[index % 3]:
-            chave = f"controle_3d_{room}"
-            # A sincronização acontece antes de instanciar o widget.
-            # Assim, botões de cenário e interruptores mostram o mesmo estado.
-            if st.session_state.get("lumina_ultimo_cenario_sync") != st.session_state.lumina_cenario:
-                st.session_state[chave] = st.session_state.lumina_luzes[room]
-            estado = st.toggle(room, key=chave)
-            st.session_state.lumina_luzes[room] = estado
-
-    st.session_state.lumina_ultimo_cenario_sync = st.session_state.lumina_cenario
-
-    st.divider()
-
-    st.markdown("### 📡 Sensores virtuais")
-
-    c1, c2, c3 = st.columns(3)
-
-    with c1:
-        st.slider(
-            "Temperatura interna (°C)",
-            15,
-            40,
-            key="lumina_temperatura",
-        )
-
-    with c2:
-        st.slider(
-            "Consumo de água (m³)",
-            0.0,
-            50.0,
-            step=0.5,
-            key="lumina_agua",
-        )
-
-    with c3:
-        st.toggle(
-            "Presença detectada",
-            key="lumina_presenca",
-        )
-
-    st.toggle(
-        "Aparelhos domésticos ligados",
-        key="lumina_aparelhos",
-    )
-
+    st.markdown('### 🏠 Casa conectada + 📱 Lumina Mobile')
+    st.caption('Controle virtual da residência. Os botões e a planta funcionam sem internet; a maquete 3D requer Three.js.')
+    import plotly.graph_objects as go
+    planta,celular=st.columns([1.55,1],gap='large')
+    with planta:
+        st.markdown('#### Planta digital da residência')
+        rooms_layout=[('Sala de Estar',0,0,4,3.5),('Cozinha',4,0,3,3.5),('Hall',7,0,1.5,3.5),('Garagem',8.5,0,3,3.5),('Quarto Casal',0,3.5,3.2,3),('Quarto Solteiro',3.2,3.5,2.8,3),('Banheiro Social',6,3.5,1.5,1.5),('Banheiro Suíte',6,5,1.5,1.5),('Quintal',8.5,3.5,3,3)]
+        fig=go.Figure()
+        for room,x,y,w,h in rooms_layout:
+            on=st.session_state.lumina_luzes[room]
+            fig.add_shape(type='rect',x0=x,y0=y,x1=x+w,y1=y+h,fillcolor='#0e887e' if on else '#163049',line=dict(color='#5b9aab',width=3))
+            fig.add_annotation(x=x+w/2,y=y+h/2,text=('💡 ' if on else '◯ ')+room,showarrow=False,font=dict(color='white',size=11))
+        fig.update_xaxes(visible=False,range=[-.2,11.7],fixedrange=True)
+        fig.update_yaxes(visible=False,range=[6.7,-.2],fixedrange=True,scaleanchor='x',scaleratio=1)
+        fig.update_layout(height=440,margin=dict(l=0,r=0,t=0,b=0),paper_bgcolor='#091c30',plot_bgcolor='#091c30')
+        st.plotly_chart(fig,use_container_width=True,config={'displayModeBar':False})
+        if st.toggle('🧊 Mostrar maquete 3D',value=False,key='lumina_3d_visible'):
+            components.html(gerar_casa_3d(),height=730,scrolling=False)
+        st.caption('A maquete é uma visualização; o celular controla o estado da casa e a planta.')
+    with celular:
+        st.markdown('''<div style="border:4px solid #63899c;border-radius:32px;padding:18px 10px;background:linear-gradient(155deg,#061325,#15465b);text-align:center;box-shadow:0 15px 32px #0005"><div style="height:7px;width:75px;border-radius:9px;background:#030b15;margin:0 auto 12px"></div><div style="color:#45ebc8;font-size:11px;letter-spacing:3px">LUMINA MOBILE</div><div style="color:white;font-size:25px;font-weight:800">📱 Minha Casa</div><div style="color:#a9d5df;font-size:12px">Central de controle digital</div></div>''',unsafe_allow_html=True)
+        resumo=obter_resumo_consumo()
+        st.metric('⚡ Potência estimada',f"{resumo['potencia_total_w']} W")
+        c1,c2=st.columns(2)
+        if c1.button('💡 Ligar tudo',use_container_width=True,key='mobile_all_on'):
+            for room in ROOMS:st.session_state.lumina_luzes[room]=True
+            st.session_state.lumina_cenario='Personalizado';st.rerun()
+        if c2.button('🌙 Desligar tudo',use_container_width=True,key='mobile_all_off'):
+            for room in ROOMS:st.session_state.lumina_luzes[room]=False
+            st.session_state.lumina_cenario='Personalizado';st.rerun()
+        st.markdown('**💡 Luzes por ambiente**')
+        for i,room in enumerate(ROOMS):
+            on=st.session_state.lumina_luzes[room]
+            x,y=st.columns([2,1]);x.caption(('🟢 ' if on else '⚫ ')+room)
+            if y.button('OFF' if on else 'ON',key=f'mobile_room_{i}',use_container_width=True):
+                st.session_state.lumina_luzes[room]=not on
+                st.session_state.lumina_cenario='Personalizado';st.rerun()
+        st.markdown('**📡 Sensores simulados**')
+        st.slider('🌡️ Temperatura °C',15,40,key='lumina_temperatura')
+        st.slider('💧 Água m³',0.0,50.0,step=.5,key='lumina_agua')
+        st.toggle('🔌 Aparelhos ligados',key='lumina_aparelhos')
+        st.toggle('🚶 Presença detectada',key='lumina_presenca')
+    st.markdown('### 📊 Telemetria simulada')
     resumo = obter_resumo_consumo()
 
     a, b, c, d = st.columns(4)
